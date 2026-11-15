@@ -142,25 +142,50 @@ select {
   padding: 0 var(--sp4);
   max-width: 100%;
 }
-/* AR layers (do not alter) */
+/* AR layers: video + scene share one rect (--vw/--vh/--vl/--vt set by ArScene.ts) */
+html,
+body {
+  overscroll-behavior: none;
+}
+.a-enter-vr,
+.a-orientation-modal {
+  display: none !important;
+}
 .ar-host {
   position: fixed;
   inset: 0;
   z-index: 1;
+  overflow: hidden;
+  pointer-events: auto;
 }
 .ar-host a-scene {
   position: absolute !important;
-  inset: 0;
+  inset: auto !important;
+  left: var(--vl, 0) !important;
+  top: var(--vt, 0) !important;
+  width: var(--vw, 100vw) !important;
+  height: var(--vh, 100vh) !important;
+  overflow: hidden;
+}
+.ar-host .a-canvas {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  z-index: auto !important;
 }
 #arjs-video {
   position: fixed !important;
-  inset: 0 !important;
-  width: 100vw !important;
-  height: 100vh !important;
-  object-fit: cover;
+  top: var(--vt, 0) !important;
+  left: var(--vl, 0) !important;
+  width: var(--vw, 100vw) !important;
+  height: var(--vh, 100vh) !important;
   margin: 0 !important;
   z-index: 0 !important;
+  object-fit: fill;
 }
+
 /* welcome */
 .hero {
   position: fixed;
@@ -468,8 +493,24 @@ select {
 /* AR hud */
 .hud {
   position: fixed;
-  inset: 0;
-  z-index: 10;
+  inset: auto;
+  left: var(--vvl, 0);
+  top: var(--vvt, 0);
+  width: var(--vvw, 100%);
+  height: var(--vvh, 100%);
+  z-index: 2147483000;
+  pointer-events: none;
+}
+.dbg {
+  position: absolute;
+  top: 120px;
+  left: 8px;
+  right: 8px;
+  font: 11px/1.35 var(--f-mono);
+  background: #000d;
+  color: #4ade80;
+  padding: 6px;
+  white-space: pre-wrap;
   pointer-events: none;
 }
 .hud > * {

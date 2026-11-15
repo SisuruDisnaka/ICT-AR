@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { createArScene } from "../ar/ArScene";
 import { ObjectManager, type ObjState } from "../ar/ObjectManager";
 import { AnimationController } from "../mascot/AnimationController";
@@ -6,6 +7,8 @@ import { AudioManager } from "../audio/AudioManager";
 import { Director } from "../show/Director";
 import { OBJECTS, type ICTObject } from "../data/objects";
 import { InfoPanel } from "./Explorer";
+import { startViewportSync, debugOn } from "../ar/viewport";
+import { createHudRoot } from "../ar/hudRoot";
 const explain = (e: any) =>
   e?.name === "NotAllowedError"
     ? "Camera permission denied. Allow the camera in the address bar, then retry."
@@ -45,6 +48,33 @@ export default function ArView({
   const [guide, setGuide] = useState(false);
   objRef.current = obj;
   const [info, setInfo] = useState(false);
+  const [dbg, setDbg] = useState("");
+  useEffect(() => startViewportSync(), []);
+  const [hud] = useState(createHudRoot);
+  useEffect(() => () => hud.destroy(), [hud]);
+  useEffect(() => {
+    if (!debugOn()) return;
+    const t = setInterval(() => {
+      const q = (x: string, r: ParentNode = document) => {
+        const e = r.querySelector(x);
+        if (!e) return "none";
+        const b = e.getBoundingClientRect();
+        const c = getComputedStyle(e);
+        return `${[b.left, b.top, b.width, b.height].map(Math.round).join(",")} ${c.display}/${c.visibility}/op${c.opacity}`;
+      };
+      const v = window.visualViewport;
+      setDbg(
+        `build-4 inner ${innerWidth}x${innerHeight} dpr ${devicePixelRatio}\nvv ${v?.width}x${v?.height} off ${v?.offsetLeft},${v?.offsetTop} sc ${v?.scale}\nhud ${q(".hud", hud.container)}\nbar ${q(".bar", hud.container)}\npill ${q(".pill", hud.container)}\nvideo ${q("#arjs-video")}\nscene ${q("a-scene")}\nhost open:${(() => {
+          try {
+            return hud.host.matches(":popover-open");
+          } catch {
+            return "n/a";
+          }
+        })()} conn:${hud.host.isConnected}\nhtml.class="${document.documentElement.className}" body.class="${document.body.className}"\nbody.style="${document.body.style.cssText.slice(0, 90)}" kids:${document.body.children.length}`,
+      );
+    }, 700);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     let on = true;
@@ -206,169 +236,177 @@ export default function ArView({
         : marker;
   const mt = {
     loading: "Loading 3D model…",
-    shown: model.msg || "Object displayed",
+    shown:
+      model.msg ||
+      (marker === "Marker detected"
+        ? "Object displayed"
+        : "Model ready - point the camera at the marker"),
     missing: model.msg || "Model unavailable",
     error: model.msg || "Model unavailable",
   }[model.s];
   return (
     <>
       <div ref={host} className="ar-host" />
-      <div className="hud">
-        <header className="topbar">
-          <button
-            className="btn"
-            onClick={onBack}
-            aria-label="Back to explorer"
-          >
-            ‹<span className="hide-sm">Explorer</span>
-          </button>
-          <div
-            role="status"
-            aria-live="polite"
-            className={`pill ${marker === "Marker detected" ? "found" : marker === "Marker lost" ? "lost" : ""}`}
-          >
-            <i className="dot" />
-            {status}
-          </div>
-        </header>
-        <div className="note" role="status">
-          {mt}
-        </div>
-        {cam === "init" && (
-          <div className="state" role="status">
-            <div className="spinner" />
-            <h2>Initializing camera</h2>
-            <p>Allow camera access if your browser asks.</p>
-          </div>
-        )}
-        {cam === "error" && (
-          <div className="state err" role="alert">
-            <h2>Camera unavailable</h2>
-            <p>{err}</p>
+      {createPortal(
+        <div className="hud">
+          <header className="topbar">
             <button
-              className="btn btn-primary"
-              onClick={() => setRetry((r) => r + 1)}
+              className="btn"
+              onClick={onBack}
+              aria-label="Back to explorer"
             >
-              Retry camera
+              ‹<span className="hide-sm">Explorer</span>
             </button>
-          </div>
-        )}
-        {cam === "ready" && !seen && guide && (
-          <div className="state" role="status">
-            <h2>Marker not found</h2>
-            <p>
-              Lay the printed marker flat, light it evenly, keep the full black
-              border in view and angle the webcam ~45° down.
-            </p>
-          </div>
-        )}
-        {caption && (
-          <div className="caption" key={caption}>
-            {caption}
-          </div>
-        )}
-        <aside
-          className={`side ${info ? "open" : ""}`}
-          aria-label="Object information"
-        >
-          <button
-            className="btn btn-icon btn-ghost close"
-            aria-label="Close information"
-            onClick={() => setInfo(false)}
-          >
-            ✕
-          </button>
-          <InfoPanel o={obj} />
-        </aside>
-        <div className="bar" role="toolbar" aria-label="AR controls">
-          <select
-            value={obj.id}
-            onChange={(e) =>
-              setObj(OBJECTS.find((o) => o.id === e.target.value)!)
-            }
-            aria-label="Switch object"
-          >
-            {OBJECTS.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name}
-              </option>
-            ))}
-          </select>
-          {devices.length > 1 && (
-            <select
-              value={deviceId}
-              onChange={(e) => setDeviceId(e.target.value)}
-              aria-label="Camera"
+            <div
+              role="status"
+              aria-live="polite"
+              className={`pill ${marker === "Marker detected" ? "found" : marker === "Marker lost" ? "lost" : ""}`}
             >
-              {devices.map((d, i) => (
-                <option key={d.deviceId} value={d.deviceId}>
-                  {d.label || `Camera ${i + 1}`}
+              <i className="dot" />
+              {status}
+            </div>
+          </header>
+          <div className="note" role="status">
+            {mt}
+          </div>
+          {dbg && <pre className="dbg">{dbg}</pre>}
+          {cam === "init" && (
+            <div className="state" role="status">
+              <div className="spinner" />
+              <h2>Initializing camera</h2>
+              <p>Allow camera access if your browser asks.</p>
+            </div>
+          )}
+          {cam === "error" && (
+            <div className="state err" role="alert">
+              <h2>Camera unavailable</h2>
+              <p>{err}</p>
+              <button
+                className="btn btn-primary"
+                onClick={() => setRetry((r) => r + 1)}
+              >
+                Retry camera
+              </button>
+            </div>
+          )}
+          {cam === "ready" && !seen && guide && (
+            <div className="state" role="status">
+              <h2>Marker not found</h2>
+              <p>
+                Lay the printed marker flat, light it evenly, keep the full
+                black border in view and angle the webcam ~45° down.
+              </p>
+            </div>
+          )}
+          {caption && (
+            <div className="caption" key={caption}>
+              {caption}
+            </div>
+          )}
+          <aside
+            className={`side ${info ? "open" : ""}`}
+            aria-label="Object information"
+          >
+            <button
+              className="btn btn-icon btn-ghost close"
+              aria-label="Close information"
+              onClick={() => setInfo(false)}
+            >
+              ✕
+            </button>
+            <InfoPanel o={obj} />
+          </aside>
+          <div className="bar" role="toolbar" aria-label="AR controls">
+            <select
+              value={obj.id}
+              onChange={(e) =>
+                setObj(OBJECTS.find((o) => o.id === e.target.value)!)
+              }
+              aria-label="Switch object"
+            >
+              {OBJECTS.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name}
                 </option>
               ))}
             </select>
-          )}
-          <button
-            className="btn info-toggle"
-            aria-expanded={info}
-            onClick={() => setInfo((i) => !i)}
-          >
-            ℹ<span className="hide-sm">Info</span>
-          </button>
-          <button
-            className="btn btn-icon"
-            onClick={() => rot(-0.4)}
-            aria-label="Rotate left"
-          >
-            ⟲
-          </button>
-          <button
-            className="btn btn-icon"
-            onClick={() => rot(0.4)}
-            aria-label="Rotate right"
-          >
-            ⟳
-          </button>
-          <button
-            className="btn btn-icon"
-            onClick={() => zoom(1.2)}
-            aria-label="Zoom in"
-          >
-            ＋
-          </button>
-          <button
-            className="btn btn-icon"
-            onClick={() => zoom(0.83)}
-            aria-label="Zoom out"
-          >
-            －
-          </button>
-          <button className="btn" onClick={() => mgr.current?.reset()}>
-            Reset
-          </button>
-          <button className="btn" aria-pressed={auto} onClick={toggleAuto}>
-            Auto {auto ? "on" : "off"}
-          </button>
-          <button
-            className="btn btn-icon"
-            onClick={fs}
-            aria-label="Toggle fullscreen"
-          >
-            ⛶
-          </button>
-          {obj.animated && (
+            {devices.length > 1 && (
+              <select
+                value={deviceId}
+                onChange={(e) => setDeviceId(e.target.value)}
+                aria-label="Camera"
+              >
+                {devices.map((d, i) => (
+                  <option key={d.deviceId} value={d.deviceId}>
+                    {d.label || `Camera ${i + 1}`}
+                  </option>
+                ))}
+              </select>
+            )}
             <button
-              className="btn btn-primary"
-              disabled={marker !== "Marker detected"}
-              onClick={() => {
-                dir.current?.cancel();
-                setTimeout(() => dir.current?.run(), 50);
-              }}
+              className="btn info-toggle"
+              aria-expanded={info}
+              onClick={() => setInfo((i) => !i)}
             >
-              {running ? "↻ Replay" : "▶ Start show"}
+              ℹ<span className="hide-sm">Info</span>
             </button>
-          )}
-        </div>
-      </div>
+            <button
+              className="btn btn-icon"
+              onClick={() => rot(-0.4)}
+              aria-label="Rotate left"
+            >
+              ⟲
+            </button>
+            <button
+              className="btn btn-icon"
+              onClick={() => rot(0.4)}
+              aria-label="Rotate right"
+            >
+              ⟳
+            </button>
+            <button
+              className="btn btn-icon"
+              onClick={() => zoom(1.2)}
+              aria-label="Zoom in"
+            >
+              ＋
+            </button>
+            <button
+              className="btn btn-icon"
+              onClick={() => zoom(0.83)}
+              aria-label="Zoom out"
+            >
+              －
+            </button>
+            <button className="btn" onClick={() => mgr.current?.reset()}>
+              Reset
+            </button>
+            <button className="btn" aria-pressed={auto} onClick={toggleAuto}>
+              Auto {auto ? "on" : "off"}
+            </button>
+            <button
+              className="btn btn-icon"
+              onClick={fs}
+              aria-label="Toggle fullscreen"
+            >
+              ⛶
+            </button>
+            {obj.animated && (
+              <button
+                className="btn btn-primary"
+                disabled={marker !== "Marker detected"}
+                onClick={() => {
+                  dir.current?.cancel();
+                  setTimeout(() => dir.current?.run(), 50);
+                }}
+              >
+                {running ? "↻ Replay" : "▶ Start show"}
+              </button>
+            )}
+          </div>
+        </div>,
+        hud.container,
+      )}
     </>
   );
 }

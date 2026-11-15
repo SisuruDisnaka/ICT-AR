@@ -1,7 +1,7 @@
 import { loadMascot, fit, type Mascot } from "../mascot/loadMascot";
 import type { ICTObject } from "../data/objects";
 export type ObjState = "loading" | "shown" | "missing" | "error";
-
+/** Swaps models inside ONE running AR marker. Holder carries user rotate/zoom; model entity carries fit. */
 export class ObjectManager {
   holder: any;
   private cur: any = null;
@@ -9,7 +9,7 @@ export class ObjectManager {
   private token = 0;
   rotX = 0;
   rotY = 0;
-  zoom = 1;
+  zoom = 1.5;
   auto = true;
   constructor(
     marker: HTMLElement,
@@ -21,7 +21,7 @@ export class ObjectManager {
   }
   reset() {
     this.rotX = this.rotY = 0;
-    this.zoom = 1;
+    this.zoom = 1.5;
   }
   tick(dt: number) {
     if (this.auto) this.rotY += dt * 0.8;
